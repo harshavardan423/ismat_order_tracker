@@ -8,13 +8,11 @@ import os
 app = Flask(__name__)
 
 # CORS configuration to allow requests from Webflow
-CORS(app, resources={
-    r"/*": {
-        "origins": ["*"],  # In production, replace with your actual domain
-        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-        "allow_headers": ["Content-Type", "Authorization"]
-    }
-})
+CORS(app, 
+     origins=["*"],  # In production, replace with your actual domain
+     methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+     allow_headers=["Content-Type", "Authorization"],
+     supports_credentials=False)
 
 # Database configuration
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///orders.db'
@@ -117,32 +115,15 @@ def init_database():
 with app.app_context():
     init_database()
 
-# CORS headers for all responses
-@app.after_request
-def after_request(response):
-    response.headers.add('Access-Control-Allow-Origin', '*')
-    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
-    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
-    return response
-
 # ------------------- ROUTES -------------------
 
 @app.route("/")
 def home():
     return render_template("index.html")
 
-@app.route("/create-order", methods=["POST", "OPTIONS"])
+@app.route("/create-order", methods=["POST"])
 def create_order():
     """API endpoint to create orders from frontend"""
-    
-    # Handle preflight request
-    if request.method == "OPTIONS":
-        response = app.make_default_options_response()
-        headers = response.headers
-        headers['Access-Control-Allow-Origin'] = '*'
-        headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
-        headers['Access-Control-Allow-Headers'] = 'Content-Type'
-        return response
     
     try:
         data = request.get_json()
