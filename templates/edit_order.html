@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Edit Order</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+
+<body class="bg-gray-100">
+
+    <!-- Navbar -->
+    <header class="w-full bg-white shadow p-4 flex items-center justify-between">
+        <!-- Logo -->
+        <div class="flex items-center space-x-3">
+            <img src="/static/images/d1ac29d9-3a91-478e-8cbf-130a3ee321c7.jpeg" alt="Logo" class="h-10 w-auto rounded">
+            <span class="font-bold text-xl text-gray-800">Order Tracking</span>
+        </div>
+
+        <!-- Nav Links -->
+        <nav class="space-x-6 text-gray-700 font-semibold">
+            <a href="/" class="hover:text-blue-600">Home</a>
+            <a href="/orders" class="hover:text-blue-600">View Orders</a>
+            <a href="/init" class="hover:text-blue-600">Generate Data</a>
+        </nav>
+    </header>
+
+    <!-- Main Content -->
+    <div class="max-w-xl mx-auto mt-10 bg-white p-6 rounded shadow">
+        <h2 class="text-2xl font-bold mb-4">Edit Order #{{ order.id }}</h2>
+
+        <form method="POST" class="space-y-4">
+            <div>
+                <label class="block text-sm font-medium">Quantity</label>
+                <input type="number" name="quantity" value="{{ order.quantity }}"
+                    class="mt-1 w-full border px-3 py-2 rounded" required>
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium">Status</label>
+                <select name="status" class="mt-1 w-full border px-3 py-2 rounded">
+                    {% for option in ['Pending', 'Shipped', 'Delivered', 'Cancelled'] %}
+                    <option value="{{ option }}" {% if order.status==option %}selected{% endif %}>{{ option }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium">Price Paid</label>
+                <input type="number" step="0.01" name="price_paid" value="{{ order.price_paid }}"
+                    class="mt-1 w-full border px-3 py-2 rounded" required>
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium">Payment Status</label>
+                <select name="payment_status" class="mt-1 w-full border px-3 py-2 rounded">
+                    {% for option in ['Paid', 'Pending', 'Failed'] %}
+                    <option value="{{ option }}" {% if order.payment_status==option %}selected{% endif %}>{{ option }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium">Delivery Status</label>
+                <input type="text" name="delivery_status" class="mt-1 w-full border px-3 py-2 rounded"
+                    value="{{ order.delivery_status }}">
+            </div>
+
+            <div class="flex justify-between mt-6">
+                <a href="/orders" class="text-blue-600 hover:underline">&larr; Cancel</a>
+                <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
+                    Save Changes
+                </button>
+            </div>
+        </form>
+    </div>
+
+</body>
+
+</html>

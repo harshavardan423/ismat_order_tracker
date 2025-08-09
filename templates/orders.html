@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Orders</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+
+<body class="bg-gray-100 text-gray-800">
+
+    <!-- Navbar -->
+    <header class="w-full bg-white shadow p-4 flex items-center justify-between">
+        <!-- Logo -->
+        <div class="flex items-center space-x-3">
+            <img src="/static/images/d1ac29d9-3a91-478e-8cbf-130a3ee321c7.jpeg" alt="Logo" class="h-10 w-auto rounded">
+            <span class="font-bold text-xl text-gray-800">Order Tracking</span>
+        </div>
+
+        <!-- Nav Links -->
+        <nav class="space-x-6 text-gray-700 font-semibold">
+            <a href="/" class="hover:text-blue-600">Home</a>
+            <a href="/orders" class="hover:text-blue-600">View Orders</a>
+            <a href="/init" class="hover:text-blue-600">Generate Data</a>
+        </nav>
+    </header>
+
+    <!-- Main Content -->
+    <div class="max-w-7xl mx-auto p-6">
+        <h1 class="text-3xl font-bold mb-6">Manage Orders</h1>
+
+        <table class="min-w-full bg-white shadow rounded overflow-hidden">
+            <thead class="bg-gray-200 text-left text-sm font-semibold">
+                <tr>
+                    <th class="p-3">#</th>
+                    <th class="p-3">User</th>
+                    <th class="p-3">Product</th>
+                    <th class="p-3">Qty</th>
+                    <th class="p-3">Status</th>
+                    <th class="p-3">Price Paid</th>
+                    <th class="p-3">Payment</th>
+                    <th class="p-3">Delivery</th>
+                    <th class="p-3">Date</th>
+                    <th class="p-3">Update</th>
+                    <th class="p-3">Edit</th>
+                </tr>
+            </thead>
+            <tbody class="text-sm divide-y divide-gray-100">
+                {% for order in orders %}
+                <tr>
+                    <td class="p-3">{{ order.id }}</td>
+                    <td class="p-3">{{ order.user.username }}</td>
+                    <td class="p-3">{{ order.product.product_name }}</td>
+                    <td class="p-3">{{ order.quantity }}</td>
+                    <td class="p-3">{{ order.status }}</td>
+                    <td class="p-3">₹{{ order.price_paid }}</td>
+                    <td class="p-3">{{ order.payment_status }}</td>
+                    <td class="p-3">{{ order.delivery_status }}</td>
+                    <td class="p-3">{{ order.order_date.strftime('%Y-%m-%d') }}</td>
+                    <td class="p-3">
+                        <form method="POST" action="/order/{{ order.id }}/update" class="flex space-x-2">
+                            <select name="status" class="border rounded px-2 py-1 text-sm">
+                                {% for s in ['Pending', 'Shipped', 'Delivered', 'Cancelled'] %}
+                                <option value="{{ s }}" {% if order.status==s %}selected{% endif %}>{{ s }}</option>
+                                {% endfor %}
+                            </select>
+                            <button type="submit"
+                                class="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 text-sm">
+                                Save
+                            </button>
+                        </form>
+                    </td>
+                    <td class="p-3">
+                        <a href="/order/{{ order.id }}/edit" class="text-blue-600 hover:underline text-sm">Edit</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <div class="mt-6">
+            <a href="/" class="text-blue-600 hover:underline">&larr; Back to Home</a>
+        </div>
+    </div>
+
+</body>
+
+</html>
