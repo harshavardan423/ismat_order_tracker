@@ -5,3 +5,4 @@ razorpay==1.4.2
 requests==2.31.0
 Werkzeug==2.3.7
 SQLAlchemy==2.0.21
+gunicorn==21.2.0
