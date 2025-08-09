@@ -1,9 +1,11 @@
-from flask import Flask, request, render_template, redirect, url_for
+from flask import Flask, request, render_template, redirect, url_for, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 from datetime import datetime
 import random
 import os
+import razorpay
+import requests
 
 app = Flask(__name__)
 
@@ -18,6 +20,16 @@ CORS(app,
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///orders.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
+
+# Razorpay configuration
+RAZORPAY_KEY_ID = 'rzp_test_w4GkDfNyQpZEXV'  # Replace with your actual key
+RAZORPAY_KEY_SECRET = 'your_razorpay_secret_key'  # Replace with your actual secret
+client = razorpay.Client(auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET))
+
+# EmailJS configuration
+EMAILJS_SERVICE_ID = 'service_qaw6x5d'
+EMAILJS_TEMPLATE_ID = 'template_ju538la'
+EMAILJS_PUBLIC_KEY = '43Xt0_HcajWF6jN7k'
 
 # ------------------- MODELS -------------------
 
@@ -43,12 +55,61 @@ class Order(db.Model):
     quantity = db.Column(db.Integer, default=1)
     status = db.Column(db.String(50), default='Pending')
     price_paid = db.Column(db.Float, default=0.0)
-    payment_status = db.Column(db.String(50), default='Pending')  # Paid, Pending, Failed
-    delivery_status = db.Column(db.String(50), default='Not Dispatched')  # Not Dispatched, In Transit, Delivered, Returned
+    payment_status = db.Column(db.String(50), default='Pending')
+    delivery_status = db.Column(db.String(50), default='Not Dispatched')
     order_date = db.Column(db.DateTime, default=datetime.utcnow)
+    payment_id = db.Column(db.String(100))  # Store Razorpay payment ID
+    razorpay_order_id = db.Column(db.String(100))  # Store Razorpay order ID
 
     user = db.relationship('User', backref=db.backref('orders', lazy=True))
     product = db.relationship('Product', backref=db.backref('orders', lazy=True))
+
+# ------------------- HELPER FUNCTIONS -------------------
+
+def send_email_confirmation(customer_details, order_items, payment_id, total_amount):
+    """Send email confirmation using EmailJS API"""
+    try:
+        # Prepare order items for email
+        order_items_text = '\n'.join([
+            f"{item['name']}{' (' + item['variant'] + ')' if item.get('variant') else ''} - Qty: {item['quantity']} - ₹{item['price']}"
+            for item in order_items
+        ])
+        
+        email_data = {
+            'service_id': EMAILJS_SERVICE_ID,
+            'template_id': EMAILJS_TEMPLATE_ID,
+            'user_id': EMAILJS_PUBLIC_KEY,
+            'template_params': {
+                'to_name': customer_details['name'],
+                'to_email': customer_details['email'],
+                'customer_name': customer_details['name'],
+                'customer_email': customer_details['email'],
+                'customer_phone': customer_details['phone'],
+                'customer_address': f"{customer_details['address']}, {customer_details['city']}, {customer_details['state']} - {customer_details['pincode']}",
+                'payment_id': payment_id,
+                'total_amount': f"{total_amount:.2f}",
+                'order_items': order_items_text,
+                'order_date': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            }
+        }
+        
+        # Send email via EmailJS REST API
+        response = requests.post(
+            'https://api.emailjs.com/api/v1.0/email/send',
+            json=email_data,
+            headers={'Content-Type': 'application/json'}
+        )
+        
+        if response.status_code == 200:
+            print("Email sent successfully")
+            return True
+        else:
+            print(f"Failed to send email: {response.status_code} - {response.text}")
+            return False
+            
+    except Exception as e:
+        print(f"Error sending email: {str(e)}")
+        return False
 
 # ------------------- DATABASE INITIALIZATION -------------------
 
@@ -115,7 +176,182 @@ def init_database():
 with app.app_context():
     init_database()
 
-# ------------------- ROUTES -------------------
+# ------------------- RAZORPAY ROUTES -------------------
+
+@app.route("/create-razorpay-order", methods=["POST"])
+def create_razorpay_order():
+    """Create a Razorpay order"""
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return {"error": "No data provided"}, 400
+        
+        # Validate required fields
+        required_fields = ['amount', 'currency', 'customer_details', 'cart_items']
+        for field in required_fields:
+            if field not in data:
+                return {"error": f"Missing required field: {field}"}, 400
+        
+        # Create Razorpay order
+        order_data = {
+            'amount': int(data['amount'] * 100),  # Amount in paise
+            'currency': data.get('currency', 'INR'),
+            'receipt': f"order_rcptid_{random.randint(1000, 9999)}",
+            'notes': {
+                'customer_name': data['customer_details']['name'],
+                'customer_email': data['customer_details']['email'],
+                'customer_phone': data['customer_details']['phone']
+            }
+        }
+        
+        razorpay_order = client.order.create(data=order_data)
+        
+        return {
+            'success': True,
+            'order_id': razorpay_order['id'],
+            'amount': razorpay_order['amount'],
+            'currency': razorpay_order['currency'],
+            'key': RAZORPAY_KEY_ID
+        }, 200
+        
+    except Exception as e:
+        print(f"Error creating Razorpay order: {str(e)}")
+        return {"error": f"Failed to create payment order: {str(e)}"}, 500
+
+@app.route("/verify-payment", methods=["POST"])
+def verify_payment():
+    """Verify Razorpay payment and create orders"""
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return {"error": "No data provided"}, 400
+        
+        # Verify payment signature
+        try:
+            client.utility.verify_payment_signature({
+                'razorpay_order_id': data['razorpay_order_id'],
+                'razorpay_payment_id': data['razorpay_payment_id'],
+                'razorpay_signature': data['razorpay_signature']
+            })
+        except razorpay.errors.SignatureVerificationError:
+            return {"error": "Payment verification failed"}, 400
+        
+        # Extract data
+        customer_details = data['customer_details']
+        cart_items = data['cart_items']
+        payment_id = data['razorpay_payment_id']
+        order_id = data['razorpay_order_id']
+        
+        # Create orders for each cart item
+        created_orders = []
+        total_amount = 0
+        
+        for item in cart_items:
+            # Create or get user
+            user = User.query.filter_by(email=customer_details['email']).first()
+            if not user:
+                # Generate unique username
+                base_username = customer_details['name'].replace(' ', '').lower()
+                username = base_username
+                counter = 1
+                while User.query.filter_by(username=username).first():
+                    username = f"{base_username}{counter}"
+                    counter += 1
+                    
+                user = User(
+                    username=username,
+                    email=customer_details['email'],
+                    password_hash="web_order"
+                )
+                db.session.add(user)
+                db.session.flush()
+            
+            # Create or get product
+            product_name = item['name']
+            if item.get('selectedVariant'):
+                product_name += f" - {item['selectedVariant']['name']}"
+                
+            product = Product.query.filter_by(product_name=product_name).first()
+            if not product:
+                product = Product(
+                    product_name=product_name,
+                    sku=item.get('selectedVariant', {}).get('sku', f"WEB-{item['id']}"),
+                    mrp=item['price'],
+                    offer_price=item['price'],
+                    in_stock=True,
+                    stock_number=100
+                )
+                db.session.add(product)
+                db.session.flush()
+            
+            # Create order
+            item_total = item['price'] * item['quantity']
+            total_amount += item_total
+            
+            order = Order(
+                user_id=user.id,
+                product_id=product.id,
+                quantity=item['quantity'],
+                status='Pending',
+                price_paid=item_total,
+                payment_status='Paid',
+                delivery_status='Not Dispatched',
+                payment_id=payment_id,
+                razorpay_order_id=order_id
+            )
+            
+            db.session.add(order)
+            db.session.flush()
+            
+            created_orders.append({
+                'order_id': order.id,
+                'product_name': product_name,
+                'variant_info': item.get('selectedVariant', {}).get('name') if item.get('selectedVariant') else None,
+                'quantity': item['quantity'],
+                'price_paid': item_total
+            })
+        
+        db.session.commit()
+        
+        # Send email confirmation
+        email_items = []
+        for item in cart_items:
+            email_items.append({
+                'name': item['name'],
+                'variant': item.get('selectedVariant', {}).get('name') if item.get('selectedVariant') else None,
+                'quantity': item['quantity'],
+                'price': item['price'] * item['quantity']
+            })
+        
+        try:
+            send_email_confirmation(customer_details, email_items, payment_id, total_amount)
+        except Exception as email_error:
+            print(f"Failed to send confirmation email: {email_error}")
+            # Don't fail the order creation if email fails
+        
+        return {
+            'success': True,
+            'payment_id': payment_id,
+            'orders': created_orders,
+            'total_amount': total_amount,
+            'message': 'Orders created successfully'
+        }, 200
+        
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error verifying payment: {str(e)}")
+        return {"error": f"Failed to process payment: {str(e)}"}, 500
+
+@app.route("/get-razorpay-key", methods=["GET"])
+def get_razorpay_key():
+    """Get Razorpay public key"""
+    return {
+        'key': RAZORPAY_KEY_ID
+    }, 200
+
+# ------------------- EXISTING ROUTES -------------------
 
 @app.route("/")
 def home():
@@ -123,7 +359,7 @@ def home():
 
 @app.route("/create-order", methods=["POST"])
 def create_order():
-    """API endpoint to create orders from frontend"""
+    """API endpoint to create orders from frontend (legacy endpoint)"""
     
     try:
         data = request.get_json()
@@ -151,10 +387,10 @@ def create_order():
             user = User(
                 username=username,
                 email=data['customer_email'],
-                password_hash="web_order"  # Placeholder for web orders
+                password_hash="web_order"
             )
             db.session.add(user)
-            db.session.flush()  # Get the user ID
+            db.session.flush()
         
         # Create or get product
         product_name = data['product_name']
@@ -166,13 +402,13 @@ def create_order():
             product = Product(
                 product_name=product_name,
                 sku=data.get('sku', f"WEB-{data.get('external_product_id', 'UNKNOWN')}"),
-                mrp=data['price_paid'] / data['quantity'],  # Assuming price_paid is total
+                mrp=data['price_paid'] / data['quantity'],
                 offer_price=data['price_paid'] / data['quantity'],
                 in_stock=True,
-                stock_number=100  # Default stock
+                stock_number=100
             )
             db.session.add(product)
-            db.session.flush()  # Get the product ID
+            db.session.flush()
         
         # Create order
         order = Order(
@@ -182,13 +418,13 @@ def create_order():
             status='Pending',
             price_paid=data['price_paid'],
             payment_status=data.get('payment_status', 'Paid'),
-            delivery_status=data.get('delivery_status', 'Not Dispatched')
+            delivery_status=data.get('delivery_status', 'Not Dispatched'),
+            payment_id=data.get('payment_id')
         )
         
         db.session.add(order)
         db.session.commit()
         
-        # Return order details
         response_data = {
             "success": True,
             "order_id": order.id,
@@ -217,7 +453,6 @@ def view_orders():
         orders = Order.query.order_by(Order.id.desc()).all()
         return render_template("orders.html", orders=orders[::-1])
     except Exception as e:
-        # If tables don't exist, try to initialize database
         with app.app_context():
             init_database()
         orders = Order.query.order_by(Order.id.desc()).all()
@@ -255,7 +490,6 @@ def generate_data():
 def health_check():
     """Health check endpoint for deployment"""
     try:
-        # Test database connection
         db.session.execute('SELECT 1')
         return {"status": "healthy", "database": "connected"}, 200
     except Exception as e:
