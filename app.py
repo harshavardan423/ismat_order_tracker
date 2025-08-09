@@ -6,7 +6,15 @@ import random
 import os
 
 app = Flask(__name__)
-CORS(app)
+
+# CORS configuration to allow requests from Webflow
+CORS(app, resources={
+    r"/*": {
+        "origins": ["*"],  # In production, replace with your actual domain
+        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization"]
+    }
+})
 
 # Database configuration
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///orders.db'
@@ -109,11 +117,118 @@ def init_database():
 with app.app_context():
     init_database()
 
+# CORS headers for all responses
+@app.after_request
+def after_request(response):
+    response.headers.add('Access-Control-Allow-Origin', '*')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+    return response
+
 # ------------------- ROUTES -------------------
 
 @app.route("/")
 def home():
     return render_template("index.html")
+
+@app.route("/create-order", methods=["POST", "OPTIONS"])
+def create_order():
+    """API endpoint to create orders from frontend"""
+    
+    # Handle preflight request
+    if request.method == "OPTIONS":
+        response = app.make_default_options_response()
+        headers = response.headers
+        headers['Access-Control-Allow-Origin'] = '*'
+        headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
+        headers['Access-Control-Allow-Headers'] = 'Content-Type'
+        return response
+    
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return {"error": "No data provided"}, 400
+        
+        # Validate required fields
+        required_fields = ['customer_name', 'customer_email', 'product_name', 'quantity', 'price_paid']
+        for field in required_fields:
+            if not data.get(field):
+                return {"error": f"Missing required field: {field}"}, 400
+        
+        # Create or get user
+        user = User.query.filter_by(email=data['customer_email']).first()
+        if not user:
+            # Generate unique username
+            base_username = data['customer_name'].replace(' ', '').lower()
+            username = base_username
+            counter = 1
+            while User.query.filter_by(username=username).first():
+                username = f"{base_username}{counter}"
+                counter += 1
+                
+            user = User(
+                username=username,
+                email=data['customer_email'],
+                password_hash="web_order"  # Placeholder for web orders
+            )
+            db.session.add(user)
+            db.session.flush()  # Get the user ID
+        
+        # Create or get product
+        product_name = data['product_name']
+        if data.get('variant_info'):
+            product_name += f" - {data['variant_info']}"
+            
+        product = Product.query.filter_by(product_name=product_name).first()
+        if not product:
+            product = Product(
+                product_name=product_name,
+                sku=data.get('sku', f"WEB-{data.get('external_product_id', 'UNKNOWN')}"),
+                mrp=data['price_paid'] / data['quantity'],  # Assuming price_paid is total
+                offer_price=data['price_paid'] / data['quantity'],
+                in_stock=True,
+                stock_number=100  # Default stock
+            )
+            db.session.add(product)
+            db.session.flush()  # Get the product ID
+        
+        # Create order
+        order = Order(
+            user_id=user.id,
+            product_id=product.id,
+            quantity=data['quantity'],
+            status='Pending',
+            price_paid=data['price_paid'],
+            payment_status=data.get('payment_status', 'Paid'),
+            delivery_status=data.get('delivery_status', 'Not Dispatched')
+        )
+        
+        db.session.add(order)
+        db.session.commit()
+        
+        # Return order details
+        response_data = {
+            "success": True,
+            "order_id": order.id,
+            "customer_name": data['customer_name'],
+            "customer_email": data['customer_email'],
+            "product_name": product_name,
+            "variant_info": data.get('variant_info'),
+            "quantity": data['quantity'],
+            "price_paid": data['price_paid'],
+            "payment_id": data.get('payment_id'),
+            "payment_status": order.payment_status,
+            "delivery_status": order.delivery_status,
+            "order_date": order.order_date.isoformat()
+        }
+        
+        return response_data, 200
+        
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error creating order: {str(e)}")
+        return {"error": f"Failed to create order: {str(e)}"}, 500
 
 @app.route("/orders")
 def view_orders():
