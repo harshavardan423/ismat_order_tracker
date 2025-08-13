@@ -1,7 +1,7 @@
 from flask import Flask, request, render_template, redirect, url_for
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
-from datetime import datetime
+from datetime import datetime, timedelta
 import random
 import os
 import requests
@@ -58,6 +58,28 @@ class Order(db.Model):
     delivery_status = db.Column(db.String(50), default='Not Dispatched')  # Not Dispatched, In Transit, Delivered, Returned
     order_date = db.Column(db.DateTime, default=datetime.utcnow)
     
+    # Customer details
+    customer_name = db.Column(db.String(200))
+    customer_phone = db.Column(db.String(20))
+    customer_company = db.Column(db.String(200))
+    gst_number = db.Column(db.String(20))
+    
+    # Address details
+    billing_address = db.Column(db.Text)
+    billing_city = db.Column(db.String(100))
+    billing_state = db.Column(db.String(100))
+    billing_pincode = db.Column(db.String(10))
+    billing_country = db.Column(db.String(100))
+    
+    shipping_address = db.Column(db.Text)
+    shipping_city = db.Column(db.String(100))
+    shipping_state = db.Column(db.String(100))
+    shipping_pincode = db.Column(db.String(10))
+    shipping_country = db.Column(db.String(100))
+    
+    # Payment details
+    payment_id = db.Column(db.String(100))
+    
     # Shiprocket integration fields
     shiprocket_order_id = db.Column(db.String(100), nullable=True)
     shiprocket_shipment_id = db.Column(db.String(100), nullable=True)
@@ -113,6 +135,12 @@ def create_shiprocket_order(order_data):
             'Authorization': f'Bearer {token}'
         }
         
+        # Validate required address fields
+        required_fields = ['billing_address', 'billing_city', 'billing_pincode', 'billing_state']
+        for field in required_fields:
+            if not order_data.get(field):
+                return None, f"Missing required field: {field}"
+        
         # Prepare Shiprocket order payload
         shiprocket_payload = {
             "order_id": f"ORDER-{order_data['order_id']}-{int(datetime.now().timestamp())}",
@@ -120,21 +148,21 @@ def create_shiprocket_order(order_data):
             "pickup_location": "Primary",  # You'll need to set this up in Shiprocket
             "billing_customer_name": order_data['customer_name'],
             "billing_last_name": "",
-            "billing_address": order_data.get('billing_address', 'Address not provided'),
-            "billing_city": order_data.get('billing_city', 'City not provided'),
-            "billing_pincode": order_data.get('billing_pincode', '000000'),
-            "billing_state": order_data.get('billing_state', 'State not provided'),
+            "billing_address": order_data['billing_address'],
+            "billing_city": order_data['billing_city'],
+            "billing_pincode": str(order_data['billing_pincode']),
+            "billing_state": order_data['billing_state'],
             "billing_country": order_data.get('billing_country', 'India'),
             "billing_email": order_data['customer_email'],
             "billing_phone": order_data.get('customer_phone', '0000000000'),
             "shipping_is_billing": True,
             "shipping_customer_name": order_data['customer_name'],
             "shipping_last_name": "",
-            "shipping_address": order_data.get('shipping_address', order_data.get('billing_address', 'Address not provided')),
-            "shipping_city": order_data.get('shipping_city', order_data.get('billing_city', 'City not provided')),
-            "shipping_pincode": order_data.get('shipping_pincode', order_data.get('billing_pincode', '000000')),
+            "shipping_address": order_data.get('shipping_address', order_data['billing_address']),
+            "shipping_city": order_data.get('shipping_city', order_data['billing_city']),
+            "shipping_pincode": str(order_data.get('shipping_pincode', order_data['billing_pincode'])),
             "shipping_country": order_data.get('shipping_country', order_data.get('billing_country', 'India')),
-            "shipping_state": order_data.get('shipping_state', order_data.get('billing_state', 'State not provided')),
+            "shipping_state": order_data.get('shipping_state', order_data['billing_state']),
             "shipping_email": order_data['customer_email'],
             "shipping_phone": order_data.get('customer_phone', '0000000000'),
             "order_items": [{
@@ -157,6 +185,8 @@ def create_shiprocket_order(order_data):
             "height": order_data.get('height', 10),
             "weight": order_data.get('weight', 0.5)
         }
+        
+        print(f"Shiprocket payload: {json.dumps(shiprocket_payload, indent=2)}")
         
         # Create order in Shiprocket
         create_url = f"{SHIPROCKET_CONFIG['baseUrl']}/orders/create/adhoc"
@@ -223,7 +253,14 @@ def init_database():
                     status=random.choice(statuses),
                     price_paid=random.randint(100, 1000),
                     payment_status=random.choice(payments),
-                    delivery_status=random.choice(deliveries)
+                    delivery_status=random.choice(deliveries),
+                    customer_name=f"Customer {i+1}",
+                    customer_phone=f"9876543{i:03d}",
+                    billing_address=f"Address {i+1}, Street {i+1}",
+                    billing_city=f"City {i+1}",
+                    billing_state=f"State {i+1}",
+                    billing_pincode=f"{110001 + i}",
+                    billing_country="India"
                 )
                 db.session.add(order)
 
@@ -256,11 +293,19 @@ def create_order():
         if not data:
             return {"error": "No data provided"}, 400
         
+        print(f"Received order data: {json.dumps(data, indent=2)}")
+        
         # Validate required fields
         required_fields = ['customer_name', 'customer_email', 'product_name', 'quantity', 'price_paid']
         for field in required_fields:
             if not data.get(field):
                 return {"error": f"Missing required field: {field}"}, 400
+        
+        # Validate address fields
+        address_fields = ['address', 'city', 'state', 'pincode']
+        for field in address_fields:
+            if not data.get(field):
+                return {"error": f"Missing required address field: {field}"}, 400
         
         # Create or get user
         user = User.query.filter_by(email=data['customer_email']).first()
@@ -299,7 +344,7 @@ def create_order():
             db.session.add(product)
             db.session.flush()  # Get the product ID
         
-        # Create order
+        # Create order with all details
         order = Order(
             user_id=user.id,
             product_id=product.id,
@@ -307,7 +352,26 @@ def create_order():
             status='Pending',
             price_paid=data['price_paid'],
             payment_status=data.get('payment_status', 'Paid'),
-            delivery_status=data.get('delivery_status', 'Not Dispatched')
+            delivery_status=data.get('delivery_status', 'Not Dispatched'),
+            # Customer details
+            customer_name=data['customer_name'],
+            customer_phone=data.get('phone', data.get('customer_phone', '0000000000')),
+            customer_company=data.get('company', ''),
+            gst_number=data.get('gstNumber', ''),
+            # Billing address
+            billing_address=data['address'],
+            billing_city=data['city'],
+            billing_state=data['state'],
+            billing_pincode=str(data['pincode']),
+            billing_country=data.get('country', 'India'),
+            # Shipping address (same as billing by default)
+            shipping_address=data.get('shipping_address', data['address']),
+            shipping_city=data.get('shipping_city', data['city']),
+            shipping_state=data.get('shipping_state', data['state']),
+            shipping_pincode=str(data.get('shipping_pincode', data['pincode'])),
+            shipping_country=data.get('shipping_country', data.get('country', 'India')),
+            # Payment details
+            payment_id=data.get('payment_id', '')
         )
         
         db.session.add(order)
@@ -318,23 +382,23 @@ def create_order():
             'order_id': order.id,
             'customer_name': data['customer_name'],
             'customer_email': data['customer_email'],
-            'customer_phone': data.get('customer_phone', data.get('phone', '0000000000')),
+            'customer_phone': data.get('phone', data.get('customer_phone', '0000000000')),
             'product_name': product_name,
             'sku': product.sku,
             'quantity': data['quantity'],
             'price_paid': data['price_paid'],
             'payment_status': data.get('payment_status', 'Paid'),
-            # Address fields - you may need to collect these from frontend
-            'billing_address': data.get('billing_address', data.get('address', 'Address not provided')),
-            'billing_city': data.get('billing_city', data.get('city', 'City not provided')),
-            'billing_pincode': str(data.get('billing_pincode', data.get('pincode', '000000'))),
-            'billing_state': data.get('billing_state', data.get('state', 'State not provided')),
-            'billing_country': data.get('billing_country', data.get('country', 'India')),
-            'shipping_address': data.get('shipping_address', data.get('address', 'Address not provided')),
-            'shipping_city': data.get('shipping_city', data.get('city', 'City not provided')),
-            'shipping_pincode': str(data.get('shipping_pincode', data.get('pincode', '000000'))),
-            'shipping_state': data.get('shipping_state', data.get('state', 'State not provided')),
-            'shipping_country': data.get('shipping_country', data.get('country', 'India')),
+            # Address fields from the order
+            'billing_address': order.billing_address,
+            'billing_city': order.billing_city,
+            'billing_pincode': order.billing_pincode,
+            'billing_state': order.billing_state,
+            'billing_country': order.billing_country,
+            'shipping_address': order.shipping_address,
+            'shipping_city': order.shipping_city,
+            'shipping_pincode': order.shipping_pincode,
+            'shipping_state': order.shipping_state,
+            'shipping_country': order.shipping_country,
             # Product dimensions and weight
             'length': data.get('length', 10),
             'breadth': data.get('breadth', 10),
@@ -376,7 +440,14 @@ def create_order():
             "order_date": order.order_date.isoformat(),
             "shiprocket_order_id": order.shiprocket_order_id,
             "shiprocket_status": order.shiprocket_status,
-            "shiprocket_tracking_url": order.shiprocket_tracking_url
+            "shiprocket_tracking_url": order.shiprocket_tracking_url,
+            "billing_address": {
+                "address": order.billing_address,
+                "city": order.billing_city,
+                "state": order.billing_state,
+                "pincode": order.billing_pincode,
+                "country": order.billing_country
+            }
         }
         
         return response_data, 200
@@ -498,4 +569,5 @@ def not_found(error):
 # ------------------- MAIN -------------------
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    port = int(os.environ.get('PORT', 10000))
+    app.run(host='0.0.0.0', port=port, debug=False)
