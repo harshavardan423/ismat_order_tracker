@@ -1,13 +1,10 @@
 <!DOCTYPE html>
 <html>
-
 <head>
     <title>Edit Order</title>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
-
 <body class="bg-gray-100">
-
     <!-- Navbar -->
     <header class="w-full bg-white shadow p-4 flex items-center justify-between">
         <!-- Logo -->
@@ -15,7 +12,6 @@
             <img src="/static/images/d1ac29d9-3a91-478e-8cbf-130a3ee321c7.jpeg" alt="Logo" class="h-10 w-auto rounded">
             <span class="font-bold text-xl text-gray-800">Order Tracking</span>
         </div>
-
         <!-- Nav Links -->
         <nav class="space-x-6 text-gray-700 font-semibold">
             <a href="/" class="hover:text-blue-600">Home</a>
@@ -23,58 +19,273 @@
             <a href="/init" class="hover:text-blue-600">Generate Data</a>
         </nav>
     </header>
-
+    
     <!-- Main Content -->
-    <div class="max-w-xl mx-auto mt-10 bg-white p-6 rounded shadow">
-        <h2 class="text-2xl font-bold mb-4">Edit Order #{{ order.id }}</h2>
-
-        <form method="POST" class="space-y-4">
-            <div>
-                <label class="block text-sm font-medium">Quantity</label>
-                <input type="number" name="quantity" value="{{ order.quantity }}"
-                    class="mt-1 w-full border px-3 py-2 rounded" required>
+    <div class="max-w-4xl mx-auto mt-10 bg-white p-8 rounded-lg shadow-lg">
+        <div class="flex items-center justify-between mb-6">
+            <h2 class="text-3xl font-bold text-gray-800">Edit Order #{{ order.id }}</h2>
+            <div class="text-sm text-gray-500">
+                Order Date: {{ order.order_date.strftime('%B %d, %Y at %I:%M %p') if order.order_date else 'N/A' }}
+            </div>
+        </div>
+        
+        <form method="POST" class="space-y-8">
+            <!-- Customer Information Section -->
+            <div class="border-b border-gray-200 pb-6">
+                <h3 class="text-xl font-semibold text-gray-800 mb-4">Customer Information</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Customer Name</label>
+                        <input type="text" name="customer_name" value="{{ order.customer_name or '' }}"
+                            class="w-full border border-gray-300 px-3 py-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Phone Number</label>
+                        <input type="text" name="customer_phone" value="{{ order.customer_phone or '' }}"
+                            class="w-full border border-gray-300 px-3 py-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Company</label>
+                        <input type="text" name="customer_company" value="{{ order.customer_company or '' }}"
+                            class="w-full border border-gray-300 px-3 py-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">GST Number</label>
+                        <input type="text" name="gst_number" value="{{ order.gst_number or '' }}"
+                            class="w-full border border-gray-300 px-3 py-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+                </div>
             </div>
 
-            <div>
-                <label class="block text-sm font-medium">Status</label>
-                <select name="status" class="mt-1 w-full border px-3 py-2 rounded">
-                    {% for option in ['Pending', 'Shipped', 'Delivered', 'Cancelled'] %}
-                    <option value="{{ option }}" {% if order.status==option %}selected{% endif %}>{{ option }}</option>
-                    {% endfor %}
-                </select>
+            <!-- Product Information Section -->
+            <div class="border-b border-gray-200 pb-6">
+                <h3 class="text-xl font-semibold text-gray-800 mb-4">Product Information</h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Product Name</label>
+                        <input type="text" value="{{ order.product.product_name if order.product else 'N/A' }}" 
+                            class="w-full border border-gray-300 px-3 py-2 rounded-md bg-gray-100" readonly>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Quantity</label>
+                        <input type="number" name="quantity" value="{{ order.quantity }}"
+                            class="w-full border border-gray-300 px-3 py-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Price Paid</label>
+                        <input type="number" step="0.01" name="price_paid" value="{{ order.price_paid }}"
+                            class="w-full border border-gray-300 px-3 py-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+                    </div>
+                </div>
             </div>
 
-            <div>
-                <label class="block text-sm font-medium">Price Paid</label>
-                <input type="number" step="0.01" name="price_paid" value="{{ order.price_paid }}"
-                    class="mt-1 w-full border px-3 py-2 rounded" required>
+            <!-- Order Status Section -->
+            <div class="border-b border-gray-200 pb-6">
+                <h3 class="text-xl font-semibold text-gray-800 mb-4">Order Status</h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Order Status</label>
+                        <select name="status" class="w-full border border-gray-300 px-3 py-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            {% for option in ['Pending', 'Shipped', 'Delivered', 'Cancelled'] %}
+                            <option value="{{ option }}" {% if order.status==option %}selected{% endif %}>{{ option }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Payment Status</label>
+                        <select name="payment_status" class="w-full border border-gray-300 px-3 py-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            {% for option in ['Paid', 'Pending', 'Failed'] %}
+                            <option value="{{ option }}" {% if order.payment_status==option %}selected{% endif %}>{{ option }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Delivery Status</label>
+                        <select name="delivery_status" class="w-full border border-gray-300 px-3 py-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            {% for option in ['Not Dispatched', 'In Transit', 'Delivered', 'Returned'] %}
+                            <option value="{{ option }}" {% if order.delivery_status==option %}selected{% endif %}>{{ option }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
             </div>
 
-            <div>
-                <label class="block text-sm font-medium">Payment Status</label>
-                <select name="payment_status" class="mt-1 w-full border px-3 py-2 rounded">
-                    {% for option in ['Paid', 'Pending', 'Failed'] %}
-                    <option value="{{ option }}" {% if order.payment_status==option %}selected{% endif %}>{{ option }}
-                    </option>
-                    {% endfor %}
-                </select>
+            <!-- Billing Address Section -->
+            <div class="border-b border-gray-200 pb-6">
+                <h3 class="text-xl font-semibold text-gray-800 mb-4">Billing Address</h3>
+                <div class="grid grid-cols-1 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Address</label>
+                        <textarea name="billing_address" rows="3"
+                            class="w-full border border-gray-300 px-3 py-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">{{ order.billing_address or '' }}</textarea>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">City</label>
+                            <input type="text" name="billing_city" value="{{ order.billing_city or '' }}"
+                                class="w-full border border-gray-300 px-3 py-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">State</label>
+                            <input type="text" name="billing_state" value="{{ order.billing_state or '' }}"
+                                class="w-full border border-gray-300 px-3 py-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Pincode</label>
+                            <input type="text" name="billing_pincode" value="{{ order.billing_pincode or '' }}"
+                                class="w-full border border-gray-300 px-3 py-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Country</label>
+                            <input type="text" name="billing_country" value="{{ order.billing_country or '' }}"
+                                class="w-full border border-gray-300 px-3 py-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        </div>
+                    </div>
+                </div>
             </div>
 
-            <div>
-                <label class="block text-sm font-medium">Delivery Status</label>
-                <input type="text" name="delivery_status" class="mt-1 w-full border px-3 py-2 rounded"
-                    value="{{ order.delivery_status }}">
+            <!-- Shipping Address Section -->
+            <div class="border-b border-gray-200 pb-6">
+                <h3 class="text-xl font-semibold text-gray-800 mb-4">Shipping Address</h3>
+                <div class="mb-4">
+                    <label class="flex items-center">
+                        <input type="checkbox" id="same_as_billing" class="mr-2" onchange="toggleShippingAddress()">
+                        <span class="text-sm text-gray-700">Same as billing address</span>
+                    </label>
+                </div>
+                <div id="shipping_fields" class="grid grid-cols-1 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Address</label>
+                        <textarea name="shipping_address" rows="3"
+                            class="w-full border border-gray-300 px-3 py-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">{{ order.shipping_address or '' }}</textarea>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">City</label>
+                            <input type="text" name="shipping_city" value="{{ order.shipping_city or '' }}"
+                                class="w-full border border-gray-300 px-3 py-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">State</label>
+                            <input type="text" name="shipping_state" value="{{ order.shipping_state or '' }}"
+                                class="w-full border border-gray-300 px-3 py-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Pincode</label>
+                            <input type="text" name="shipping_pincode" value="{{ order.shipping_pincode or '' }}"
+                                class="w-full border border-gray-300 px-3 py-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Country</label>
+                            <input type="text" name="shipping_country" value="{{ order.shipping_country or '' }}"
+                                class="w-full border border-gray-300 px-3 py-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        </div>
+                    </div>
+                </div>
             </div>
 
-            <div class="flex justify-between mt-6">
-                <a href="/orders" class="text-blue-600 hover:underline">&larr; Cancel</a>
-                <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
-                    Save Changes
-                </button>
+            <!-- Payment Information Section -->
+            <div class="border-b border-gray-200 pb-6">
+                <h3 class="text-xl font-semibold text-gray-800 mb-4">Payment Information</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Payment ID</label>
+                        <input type="text" name="payment_id" value="{{ order.payment_id or '' }}"
+                            class="w-full border border-gray-300 px-3 py-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Shiprocket Information Section (Read-only) -->
+            {% if order.shiprocket_order_id or order.shiprocket_status %}
+            <div class="border-b border-gray-200 pb-6">
+                <h3 class="text-xl font-semibold text-gray-800 mb-4">Shiprocket Information</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Shiprocket Order ID</label>
+                        <input type="text" value="{{ order.shiprocket_order_id or 'N/A' }}"
+                            class="w-full border border-gray-300 px-3 py-2 rounded-md bg-gray-100" readonly>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Shiprocket Status</label>
+                        <input type="text" value="{{ order.shiprocket_status or 'N/A' }}"
+                            class="w-full border border-gray-300 px-3 py-2 rounded-md bg-gray-100" readonly>
+                    </div>
+                    {% if order.shiprocket_tracking_url %}
+                    <div class="md:col-span-2">
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Tracking URL</label>
+                        <a href="{{ order.shiprocket_tracking_url }}" target="_blank" 
+                            class="text-blue-600 hover:text-blue-800 underline break-all">
+                            {{ order.shiprocket_tracking_url }}
+                        </a>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Action Buttons -->
+            <div class="flex justify-between items-center pt-6">
+                <a href="/orders" class="text-blue-600 hover:text-blue-800 font-medium flex items-center">
+                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+                    </svg>
+                    Back to Orders
+                </a>
+                <div class="space-x-4">
+                    <button type="button" onclick="window.location.reload()" 
+                        class="bg-gray-500 text-white px-6 py-2 rounded-md hover:bg-gray-600 transition duration-200">
+                        Cancel
+                    </button>
+                    <button type="submit" 
+                        class="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700 transition duration-200 font-medium">
+                        Save Changes
+                    </button>
+                </div>
             </div>
         </form>
     </div>
 
-</body>
+    <script>
+        function toggleShippingAddress() {
+            const checkbox = document.getElementById('same_as_billing');
+            const shippingFields = document.getElementById('shipping_fields');
+            const billingInputs = document.querySelectorAll('[name^="billing_"]');
+            const shippingInputs = document.querySelectorAll('[name^="shipping_"]');
+            
+            if (checkbox.checked) {
+                // Copy billing address to shipping address
+                shippingInputs[0].value = billingInputs[0].value; // address
+                shippingInputs[1].value = billingInputs[1].value; // city
+                shippingInputs[2].value = billingInputs[2].value; // state
+                shippingInputs[3].value = billingInputs[3].value; // pincode
+                shippingInputs[4].value = billingInputs[4].value; // country
+                
+                // Disable shipping fields
+                shippingInputs.forEach(input => {
+                    input.disabled = true;
+                    input.classList.add('bg-gray-100');
+                });
+            } else {
+                // Enable shipping fields
+                shippingInputs.forEach(input => {
+                    input.disabled = false;
+                    input.classList.remove('bg-gray-100');
+                });
+            }
+        }
 
+        // Check if shipping address is same as billing on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            const billingAddress = document.querySelector('[name="billing_address"]').value;
+            const shippingAddress = document.querySelector('[name="shipping_address"]').value;
+            const checkbox = document.getElementById('same_as_billing');
+            
+            if (billingAddress === shippingAddress && billingAddress.trim() !== '') {
+                checkbox.checked = true;
+                toggleShippingAddress();
+            }
+        });
+    </script>
+</body>
 </html>
