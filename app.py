@@ -542,13 +542,45 @@ def update_order_status(order_id):
 def edit_order(order_id):
     order = Order.query.get_or_404(order_id)
     if request.method == "POST":
+        # Basic order information
         order.quantity = int(request.form.get("quantity", 1))
         order.status = request.form.get("status")
         order.price_paid = float(request.form.get("price_paid", 0))
         order.payment_status = request.form.get("payment_status")
         order.delivery_status = request.form.get("delivery_status")
-        db.session.commit()
-        return redirect(url_for("view_orders"))
+        
+        # Customer details
+        order.customer_name = request.form.get("customer_name", "")
+        order.customer_phone = request.form.get("customer_phone", "")
+        order.customer_company = request.form.get("customer_company", "")
+        order.gst_number = request.form.get("gst_number", "")
+        
+        # Billing address
+        order.billing_address = request.form.get("billing_address", "")
+        order.billing_city = request.form.get("billing_city", "")
+        order.billing_state = request.form.get("billing_state", "")
+        order.billing_pincode = request.form.get("billing_pincode", "")
+        order.billing_country = request.form.get("billing_country", "")
+        
+        # Shipping address
+        order.shipping_address = request.form.get("shipping_address", "")
+        order.shipping_city = request.form.get("shipping_city", "")
+        order.shipping_state = request.form.get("shipping_state", "")
+        order.shipping_pincode = request.form.get("shipping_pincode", "")
+        order.shipping_country = request.form.get("shipping_country", "")
+        
+        # Payment details
+        order.payment_id = request.form.get("payment_id", "")
+        
+        try:
+            db.session.commit()
+            return redirect(url_for("view_orders"))
+        except Exception as e:
+            db.session.rollback()
+            # You might want to add flash messaging here for error handling
+            print(f"Error updating order: {e}")
+            return redirect(url_for("edit_order", order_id=order_id))
+            
     return render_template("edit_order.html", order=order)
 
 @app.route("/shiprocket/sync/<int:order_id>", methods=["POST"])
@@ -632,3 +664,4 @@ def not_found(error):
 if __name__ == "__main__":
     port = int(os.environ.get('PORT', 10000))
     app.run(host='0.0.0.0', port=port, debug=False)
+
