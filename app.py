@@ -123,6 +123,34 @@ def get_shiprocket_token():
         print(f"Error getting Shiprocket token: {e}")
         return None
 
+def check_shiprocket_account():
+    """Check Shiprocket account setup and pickup locations"""
+    try:
+        token = get_shiprocket_token()
+        if not token:
+            return None, "Failed to get Shiprocket token"
+        
+        headers = {
+            'Content-Type': 'application/json',
+            'Authorization': f'Bearer {token}'
+        }
+        
+        # Check pickup locations
+        pickup_url = f"{SHIPROCKET_CONFIG['baseUrl']}/settings/company/pickup"
+        response = requests.get(pickup_url, headers=headers)
+        
+        print(f"Pickup locations API response: {response.status_code}")
+        print(f"Pickup locations data: {response.text}")
+        
+        if response.status_code == 200:
+            pickup_data = response.json()
+            return pickup_data, None
+        else:
+            return None, f"Failed to get pickup locations: {response.status_code} - {response.text}"
+            
+    except Exception as e:
+        return None, f"Error checking Shiprocket account: {str(e)}"
+
 def create_shiprocket_order(order_data):
     """Create order in Shiprocket"""
     try:
@@ -135,70 +163,95 @@ def create_shiprocket_order(order_data):
             'Authorization': f'Bearer {token}'
         }
         
+        # First, check account setup
+        pickup_data, pickup_error = check_shiprocket_account()
+        if pickup_error:
+            print(f"Pickup location check failed: {pickup_error}")
+            # Continue anyway, but log the issue
+        else:
+            print(f"Available pickup locations: {pickup_data}")
+        
         # Validate required address fields
         required_fields = ['billing_address', 'billing_city', 'billing_pincode', 'billing_state']
         for field in required_fields:
             if not order_data.get(field):
                 return None, f"Missing required field: {field}"
         
-        # Prepare Shiprocket order payload
-        shiprocket_payload = {
-            "order_id": f"ORDER-{order_data['order_id']}-{int(datetime.now().timestamp())}",
-            "order_date": datetime.now().strftime("%Y-%m-%d %H:%M"),
-            "pickup_location": "Primary",  # You'll need to set this up in Shiprocket
-            "billing_customer_name": order_data['customer_name'],
-            "billing_last_name": "",
-            "billing_address": order_data['billing_address'],
-            "billing_city": order_data['billing_city'],
-            "billing_pincode": str(order_data['billing_pincode']),
-            "billing_state": order_data['billing_state'],
-            "billing_country": order_data.get('billing_country', 'India'),
-            "billing_email": order_data['customer_email'],
-            "billing_phone": order_data.get('customer_phone', '0000000000'),
-            "shipping_is_billing": True,
-            "shipping_customer_name": order_data['customer_name'],
-            "shipping_last_name": "",
-            "shipping_address": order_data.get('shipping_address', order_data['billing_address']),
-            "shipping_city": order_data.get('shipping_city', order_data['billing_city']),
-            "shipping_pincode": str(order_data.get('shipping_pincode', order_data['billing_pincode'])),
-            "shipping_country": order_data.get('shipping_country', order_data.get('billing_country', 'India')),
-            "shipping_state": order_data.get('shipping_state', order_data['billing_state']),
-            "shipping_email": order_data['customer_email'],
-            "shipping_phone": order_data.get('customer_phone', '0000000000'),
-            "order_items": [{
-                "name": order_data['product_name'],
-                "sku": order_data.get('sku', 'DEFAULT-SKU'),
-                "units": order_data['quantity'],
-                "selling_price": order_data['price_paid'] / order_data['quantity'],
-                "discount": 0,
-                "tax": 0,
-                "hsn": order_data.get('hsn', '000000')  # Default HSN code
-            }],
-            "payment_method": "Prepaid" if order_data.get('payment_status') == 'Paid' else "COD",
-            "shipping_charges": 0,
-            "giftwrap_charges": 0,
-            "transaction_charges": 0,
-            "total_discount": 0,
-            "sub_total": order_data['price_paid'],
-            "length": order_data.get('length', 10),
-            "breadth": order_data.get('breadth', 10),
-            "height": order_data.get('height', 10),
-            "weight": order_data.get('weight', 0.5)
-        }
+        # Try different pickup location values
+        pickup_locations_to_try = ["Primary", "primary", "Default", "default"]
         
-        print(f"Shiprocket payload: {json.dumps(shiprocket_payload, indent=2)}")
+        for pickup_location in pickup_locations_to_try:
+            # Prepare Shiprocket order payload
+            shiprocket_payload = {
+                "order_id": f"ORDER-{order_data['order_id']}-{int(datetime.now().timestamp())}",
+                "order_date": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                "pickup_location": pickup_location,
+                "billing_customer_name": order_data['customer_name'],
+                "billing_last_name": "",
+                "billing_address": order_data['billing_address'],
+                "billing_city": order_data['billing_city'],
+                "billing_pincode": str(order_data['billing_pincode']),
+                "billing_state": order_data['billing_state'],
+                "billing_country": order_data.get('billing_country', 'India'),
+                "billing_email": order_data['customer_email'],
+                "billing_phone": order_data.get('customer_phone', '0000000000'),
+                "shipping_is_billing": True,
+                "shipping_customer_name": order_data['customer_name'],
+                "shipping_last_name": "",
+                "shipping_address": order_data.get('shipping_address', order_data['billing_address']),
+                "shipping_city": order_data.get('shipping_city', order_data['billing_city']),
+                "shipping_pincode": str(order_data.get('shipping_pincode', order_data['billing_pincode'])),
+                "shipping_country": order_data.get('shipping_country', order_data.get('billing_country', 'India')),
+                "shipping_state": order_data.get('shipping_state', order_data['billing_state']),
+                "shipping_email": order_data['customer_email'],
+                "shipping_phone": order_data.get('customer_phone', '0000000000'),
+                "order_items": [{
+                    "name": order_data['product_name'],
+                    "sku": order_data.get('sku', 'DEFAULT-SKU'),
+                    "units": order_data['quantity'],
+                    "selling_price": order_data['price_paid'] / order_data['quantity'],
+                    "discount": 0,
+                    "tax": 0,
+                    "hsn": order_data.get('hsn', '000000')  # Default HSN code
+                }],
+                "payment_method": "Prepaid" if order_data.get('payment_status') == 'Paid' else "COD",
+                "shipping_charges": 0,
+                "giftwrap_charges": 0,
+                "transaction_charges": 0,
+                "total_discount": 0,
+                "sub_total": order_data['price_paid'],
+                "length": order_data.get('length', 10),
+                "breadth": order_data.get('breadth', 10),
+                "height": order_data.get('height', 10),
+                "weight": order_data.get('weight', 0.5)
+            }
+            
+            print(f"Trying pickup location: {pickup_location}")
+            print(f"Shiprocket payload: {json.dumps(shiprocket_payload, indent=2)}")
+            
+            # Create order in Shiprocket
+            create_url = f"{SHIPROCKET_CONFIG['baseUrl']}/orders/create/adhoc"
+            response = requests.post(create_url, json=shiprocket_payload, headers=headers)
+            
+            print(f"Shiprocket response status: {response.status_code}")
+            print(f"Shiprocket response: {response.text}")
+            
+            if response.status_code == 200:
+                shiprocket_response = response.json()
+                return shiprocket_response, None
+            elif response.status_code != 400:
+                # If it's not a 400 error, don't try other pickup locations
+                error_message = f"Shiprocket API error: {response.status_code} - {response.text}"
+                print(error_message)
+                return None, error_message
+            
+            # If 400 error, try next pickup location
+            print(f"400 error with pickup location '{pickup_location}', trying next...")
         
-        # Create order in Shiprocket
-        create_url = f"{SHIPROCKET_CONFIG['baseUrl']}/orders/create/adhoc"
-        response = requests.post(create_url, json=shiprocket_payload, headers=headers)
-        
-        if response.status_code == 200:
-            shiprocket_response = response.json()
-            return shiprocket_response, None
-        else:
-            error_message = f"Shiprocket API error: {response.status_code} - {response.text}"
-            print(error_message)
-            return None, error_message
+        # If all pickup locations failed
+        error_message = f"All pickup locations failed. Last response: {response.status_code} - {response.text}"
+        print(error_message)
+        return None, error_message
             
     except Exception as e:
         error_message = f"Error creating Shiprocket order: {str(e)}"
@@ -282,6 +335,14 @@ with app.app_context():
 @app.route("/")
 def home():
     return render_template("index.html")
+
+@app.route("/shiprocket/debug")
+def debug_shiprocket():
+    """Debug endpoint to check Shiprocket account setup"""
+    pickup_data, error = check_shiprocket_account()
+    if error:
+        return {"error": error}, 400
+    return {"pickup_locations": pickup_data}, 200
 
 @app.route("/create-order", methods=["POST"])
 def create_order():
