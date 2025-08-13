@@ -163,7 +163,7 @@ def create_shiprocket_order(order_data):
             'Authorization': f'Bearer {token}'
         }
         
-        # First, check account setup
+        # First, check account setup and get actual pickup locations
         pickup_data, pickup_error = check_shiprocket_account()
         if pickup_error:
             print(f"Pickup location check failed: {pickup_error}")
@@ -177,8 +177,18 @@ def create_shiprocket_order(order_data):
             if not order_data.get(field):
                 return None, f"Missing required field: {field}"
         
-        # Try different pickup location values
-        pickup_locations_to_try = ["Primary", "primary", "Default", "default"]
+        # Get actual pickup locations from the API response
+        pickup_locations_to_try = []
+        if pickup_data and 'data' in pickup_data and 'shipping_address' in pickup_data['data']:
+            # Extract actual pickup location names from the API response
+            for location in pickup_data['data']['shipping_address']:
+                pickup_locations_to_try.append(location['pickup_location'])
+        
+        # Fallback to common names if API call failed
+        if not pickup_locations_to_try:
+            pickup_locations_to_try = ["Home", "Primary", "primary", "Default", "default"]
+        
+        print(f"Pickup locations to try: {pickup_locations_to_try}")
         
         for pickup_location in pickup_locations_to_try:
             # Prepare Shiprocket order payload
@@ -238,7 +248,15 @@ def create_shiprocket_order(order_data):
             
             if response.status_code == 200:
                 shiprocket_response = response.json()
-                return shiprocket_response, None
+                # Check if the response indicates success
+                if 'order_id' in shiprocket_response or 'shipment_id' in shiprocket_response:
+                    return shiprocket_response, None
+                elif 'message' in shiprocket_response and 'Wrong Pickup location' in shiprocket_response['message']:
+                    # Continue to try next pickup location
+                    print(f"Wrong pickup location '{pickup_location}', trying next...")
+                    continue
+                else:
+                    return shiprocket_response, None
             elif response.status_code != 400:
                 # If it's not a 400 error, don't try other pickup locations
                 error_message = f"Shiprocket API error: {response.status_code} - {response.text}"
@@ -664,4 +682,5 @@ def not_found(error):
 if __name__ == "__main__":
     port = int(os.environ.get('PORT', 10000))
     app.run(host='0.0.0.0', port=port, debug=False)
+
 
